@@ -1,0 +1,95 @@
+// ============================================================
+//  NFC Zeiterfassung – Google Apps Script Backend
+//  1. Neue Google-Tabelle erstellen
+//  2. Erweiterungen → Apps Script → diesen Code einfügen
+//  3. setupSheet() einmal manuell ausführen
+//  4. Bereitstellen → Neue Bereitstellung → Web-App
+//     - Ausführen als: Ich (deine E-Mail)
+//     - Zugriff: Jeder
+//  5. Die Web-App-URL in die PWA eintragen (WEBHOOK_URL)
+// ============================================================
+
+const SHEET_NAME = "Zeiterfassung";
+
+// Eingehende POST-Anfragen von der PWA verarbeiten
+function doPost(e) {
+  try {
+    const data = JSON.parse(e.postData.contents);
+    const { uid, name, action, timestamp } = data;
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName(SHEET_NAME);
+
+    // Bei OUT: letzte IN-Zeit suchen und Dauer berechnen
+    let durationMin = "";
+    if (action === "OUT") {
+      const values = sheet.getDataRange().getValues();
+      for (let i = values.length - 1; i >= 1; i--) {
+        if (String(values[i][1]) === String(uid) && values[i][3] === "IN") {
+          const inTime = new Date(values[i][0]);
+          const outTime = new Date(timestamp);
+          const mins = Math.round((outTime - inTime) / 60000);
+          const h = Math.floor(mins / 60);
+          const m = mins % 60;
+          durationMin = h > 0 ? `${h}h ${m}min` : `${m}min`;
+          break;
+        }
+      }
+    }
+
+    sheet.appendRow([
+      new Date(timestamp), // Zeitstempel
+      uid,                 // NFC-Tag UID
+      name,                // Mitarbeitername
+      action,              // IN oder OUT
+      durationMin          // Dauer (nur bei OUT)
+    ]);
+
+    // Letzte Zeile formatieren
+    const lastRow = sheet.getLastRow();
+    if (action === "IN") {
+      sheet.getRange(lastRow, 4).setBackground("#d9ead3"); // grün
+    } else {
+      sheet.getRange(lastRow, 4).setBackground("#fce5cd"); // orange
+    }
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: true, action, name, duration: durationMin }))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// GET-Anfragen (Browser-Test ob der Webhook läuft)
+function doGet(e) {
+  return ContentService.createTextOutput("✓ NFC Zeiterfassung läuft");
+}
+
+// Einmalig ausführen: Tabellenblatt + Kopfzeile anlegen
+function setupSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_NAME);
+  }
+  const header = [["Zeitstempel", "NFC-UID", "Mitarbeiter", "Aktion", "Dauer"]];
+  sheet.getRange(1, 1, 1, 5).setValues(header);
+  sheet.setFrozenRows(1);
+
+  // Spaltenbreiten
+  sheet.setColumnWidth(1, 180);
+  sheet.setColumnWidth(2, 160);
+  sheet.setColumnWidth(3, 140);
+  sheet.setColumnWidth(4, 70);
+  sheet.setColumnWidth(5, 80);
+
+  // Kopfzeile fett
+  sheet.getRange(1, 1, 1, 5).setFontWeight("bold").setBackground("#434343").setFontColor("#ffffff");
+
+  SpreadsheetApp.flush();
+  Logger.log("✓ Sheet angelegt: " + SHEET_NAME);
+}
