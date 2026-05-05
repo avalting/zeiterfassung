@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0a0a0a">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Zeiterfassung</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #111111;
+      --border: #222;
+      --text: #e8e4dc;
+      --muted: #555;
+      --in-color: #c8f09a;
+      --in-glow: rgba(180, 240, 100, 0.15);
+      --out-color: #f0a96a;
+      --out-glow: rgba(240, 160, 80, 0.15);
+      --accent: #d4c5a9;
+      --scan-color: #6ab4f0;
+      --scan-glow: rgba(100, 180, 240, 0.12);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: fixed;
+      inset: 0;
+    }
+
+    /* Hintergrund-Raster */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 40px 40px;
+      opacity: 0.4;
+      pointer-events: none;
+    }
+
+    /* ── HEADER ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px 12px;
+      border-bottom: 1px solid var(--border);
+      position: relative;
+      z-index: 2;
+    }
+
+    .brand {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 13px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    .clock {
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ── HAUPT-DISPLAY ── */
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      position: relative;
+      z-index: 2;
+    }
+
+    /* Status-Kreis */
+    .status-ring {
+      width: 180px;
+      height: 180px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      margin-bottom: 32px;
+      transition: border-color 0.4s, box-shadow 0.4s, background 0.4s;
+    }
+
+    .status-ring::before {
+      content: '';
+      position: absolute;
+      inset: 8px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      transition: border-color 0.4s;
+    }
+
+    .status-ring.scanning {
+      border-color: var(--scan-color);
+      box-shadow: 0 0 40px var(--scan-glow), inset 0 0 40px var(--scan-glow);
+      animation: pulse-scan 2s ease-in-out infinite;
+    }
+    .status-ring.scanning::before { border-color: var(--scan-color); }
+
+    .status-ring.success-in {
+      border-color: var(--in-color);
+      box-shadow: 0 0 60px var(--in-glow), inset 0 0 40px var(--in-glow);
+      background: var(--in-glow);
+    }
+    .status-ring.success-in::before { border-color: var(--in-color); }
+
+    .status-ring.success-out {
+      border-color: var(--out-color);
+      box-shadow: 0 0 60px var(--out-glow), inset 0 0 40px var(--out-glow);
+      background: var(--out-glow);
+    }
+    .status-ring.success-out::before { border-color: var(--out-color); }
+
+    .status-ring.error {
+      border-color: #f06a6a;
+      box-shadow: 0 0 40px rgba(240,80,80,0.15);
+    }
+
+    @keyframes pulse-scan {
+      0%, 100% { box-shadow: 0 0 20px var(--scan-glow), inset 0 0 20px var(--scan-glow); }
+      50% { box-shadow: 0 0 60px rgba(100,180,240,0.25), inset 0 0 60px rgba(100,180,240,0.15); }
+    }
+
+    .status-icon {
+      font-size: 52px;
+      line-height: 1;
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      user-select: none;
+    }
+
+    .status-ring.success-in .status-icon,
+    .status-ring.success-out .status-icon {
+      transform: scale(1.1);
+    }
+
+    /* Haupt-Label */
+    .status-label {
+      font-family: 'Syne', sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 10px;
+      transition: color 0.3s;
+      height: 14px;
+    }
+
+    /* Mitarbeiter-Name */
+    .employee-name {
+      font-family: 'Syne', sans-serif;
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      color: var(--text);
+      text-align: center;
+      height: 38px;
+      line-height: 38px;
+      transition: color 0.3s;
+    }
+
+    .employee-name.in { color: var(--in-color); }
+    .employee-name.out { color: var(--out-color); }
+
+    /* Zeitstempel */
+    .timestamp {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 8px;
+      height: 16px;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.05em;
+    }
+
+    /* Dauer-Badge */
+    .duration-badge {
+      margin-top: 12px;
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      border: 1px solid transparent;
+      height: 26px;
+      line-height: 18px;
+      transition: all 0.3s;
+    }
+    .duration-badge.visible {
+      border-color: var(--out-color);
+      color: var(--out-color);
+      background: var(--out-glow);
+    }
+
+    /* ── LOG ── */
+    .log-section {
+      border-top: 1px solid var(--border);
+      padding: 12px 20px 20px;
+      position: relative;
+      z-index: 2;
+      max-height: 200px;
+      overflow: hidden;
+    }
+
+    .log-title {
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .log-list {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .log-entry {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 11px;
+      opacity: 0;
+      transform: translateY(8px);
+      animation: slide-in 0.3s ease forwards;
+    }
+
+    @keyframes slide-in {
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .log-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .log-dot.in { background: var(--in-color); }
+    .log-dot.out { background: var(--out-color); }
+
+    .log-name { color: var(--text); font-weight: 400; }
+    .log-action { font-size: 10px; letter-spacing: 0.1em; }
+    .log-action.in { color: var(--in-color); }
+    .log-action.out { color: var(--out-color); }
+    .log-time { color: var(--muted); margin-left: auto; font-variant-numeric: tabular-nums; }
+    .log-dur { color: var(--muted); font-size: 10px; }
+
+    /* ── SETUP OVERLAY ── */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(10,10,10,0.96);
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      padding: 24px 20px;
+      overflow-y: auto;
+    }
+    .overlay.hidden { display: none; }
+
+    .overlay h2 {
+      font-family: 'Syne', sans-serif;
+      font-size: 18px;
+      font-weight: 800;
+      margin-bottom: 6px;
+      color: var(--accent);
+    }
+    .overlay p.sub {
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+      margin-bottom: 24px;
+      line-height: 1.6;
+    }
+
+    .field-label {
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .field {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      padding: 10px 12px;
+      margin-bottom: 16px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .field:focus { border-color: var(--accent); }
+
+    textarea.field {
+      resize: vertical;
+      min-height: 100px;
+      line-height: 1.6;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 14px;
+      border-radius: 8px;
+      border: none;
+      font-family: 'Syne', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary { background: var(--accent); color: #0a0a0a; }
+    .btn-secondary {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      margin-top: 10px;
+    }
+
+    /* Gear-Icon */
+    .settings-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 6px;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 14px;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .settings-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* NFC nicht unterstützt */
+    .no-nfc {
+      text-align: center;
+      color: #f06a6a;
+      font-size: 12px;
+      line-height: 1.7;
+    }
+    .no-nfc strong { display: block; font-size: 14px; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+
+<!-- SETUP OVERLAY -->
+<div class="overlay" id="overlay">
+  <h2>Einrichtung</h2>
+  <p class="sub">Einmalig konfigurieren. Daten werden lokal gespeichert.</p>
+
+  <div class="field-label">Google Apps Script Webhook-URL</div>
+  <input class="field" id="cfg-url" type="url" placeholder="https://script.google.com/macros/s/.../exec">
+
+  <div class="field-label">Mitarbeiter (eine Zeile pro Person: UID=Name)</div>
+  <textarea class="field" id="cfg-employees" placeholder="04:A3:BC:12:34:56=Max Mustermann&#10;04:1F:7C:89:AB:CD=Lisa Muster&#10;04:99:DE:11:22:33=Tom Beispiel"></textarea>
+
+  <div class="field-label" style="margin-top:4px">Wo finde ich die UID?</div>
+  <p style="font-size:11px;color:var(--muted);margin-bottom:20px;line-height:1.6">
+    Einfach den NFC-Tag auf das Android-Gerät halten, bevor du eine UID eingetragen hast.
+    Die UID wird dann oben im Fehler-Display angezeigt → kopieren → hier eintragen.
+  </p>
+
+  <button class="btn btn-primary" onclick="saveConfig()">Speichern & starten</button>
+  <button class="btn btn-secondary" onclick="closeOverlay()">Abbrechen</button>
+</div>
+
+<!-- HEADER -->
+<header>
+  <div class="brand">Zeiterfassung</div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <div class="clock" id="clock">00:00:00</div>
+    <button class="settings-btn" onclick="openOverlay()" title="Einstellungen">⚙</button>
+  </div>
+</header>
+
+<!-- MAIN -->
+<main>
+  <div class="status-ring scanning" id="ring">
+    <div class="status-icon" id="icon">📡</div>
+  </div>
+
+  <div class="status-label" id="label">NFC bereit</div>
+  <div class="employee-name" id="empName">Tag halten…</div>
+  <div class="timestamp" id="ts"></div>
+  <div class="duration-badge" id="dur"></div>
+</main>
+
+<!-- LOG -->
+<div class="log-section">
+  <div class="log-title">Letzte Buchungen</div>
+  <div class="log-list" id="logList"></div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+//  KONFIGURATION (aus localStorage)
+// ─────────────────────────────────────────────
+let config = {
+  webhookUrl: '',
+  employees: {} // uid → name
+};
+
+function loadConfig() {
+  try {
+    const saved = localStorage.getItem('nfc-zeiterfassung-config');
+    if (saved) {
+      config = JSON.parse(saved);
+      document.getElementById('cfg-url').value = config.webhookUrl || '';
+      const lines = Object.entries(config.employees || {})
+        .map(([uid, name]) => `${uid}=${name}`).join('\n');
+      document.getElementById('cfg-employees').value = lines;
+    }
+  } catch(e) {}
+}
+
+function saveConfig() {
+  const url = document.getElementById('cfg-url').value.trim();
+  const lines = document.getElementById('cfg-employees').value.trim().split('\n');
+  const employees = {};
+  lines.forEach(line => {
+    const [uid, ...rest] = line.split('=');
+    if (uid && rest.length) employees[uid.trim().toLowerCase()] = rest.join('=').trim();
+  });
+  config = { webhookUrl: url, employees };
+  localStorage.setItem('nfc-zeiterfassung-config', JSON.stringify(config));
+  document.getElementById('overlay').classList.add('hidden');
+}
+
+function openOverlay() {
+  document.getElementById('cfg-url').value = config.webhookUrl || '';
+  const lines = Object.entries(config.employees || {}).map(([u,n]) => `${u}=${n}`).join('\n');
+  document.getElementById('cfg-employees').value = lines;
+  document.getElementById('overlay').classList.remove('hidden');
+}
+function closeOverlay() {
+  document.getElementById('overlay').classList.add('hidden');
+}
+
+// ─────────────────────────────────────────────
+//  UHRZEIT
+// ─────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ─────────────────────────────────────────────
+//  IN/OUT STATE (pro UID in localStorage)
+// ─────────────────────────────────────────────
+function getState(uid) {
+  try {
+    const s = JSON.parse(localStorage.getItem('nfc-state-' + uid));
+    return s || { action: null };
+  } catch(e) { return { action: null }; }
+}
+function setState(uid, state) {
+  localStorage.setItem('nfc-state-' + uid, JSON.stringify(state));
+}
+function nextAction(uid) {
+  const s = getState(uid);
+  return s.action === 'IN' ? 'OUT' : 'IN';
+}
+
+// ─────────────────────────────────────────────
+//  UI UPDATES
+// ─────────────────────────────────────────────
+const ring    = document.getElementById('ring');
+const icon    = document.getElementById('icon');
+const label   = document.getElementById('label');
+const empName = document.getElementById('empName');
+const tsEl    = document.getElementById('ts');
+const durEl   = document.getElementById('dur');
+
+function setScanning() {
+  ring.className = 'status-ring scanning';
+  icon.textContent = '📡';
+  label.textContent = 'NFC bereit';
+  empName.className = 'employee-name';
+  empName.textContent = 'Tag halten…';
+  tsEl.textContent = '';
+  durEl.className = 'duration-badge';
+  durEl.textContent = '';
+}
+
+function setSuccess(name, action, duration) {
+  ring.className = 'status-ring success-' + action.toLowerCase();
+  icon.textContent = action === 'IN' ? '✓' : '◼';
+  label.textContent = action === 'IN' ? 'Eingestempelt' : 'Ausgestempelt';
+  empName.className = 'employee-name ' + action.toLowerCase();
+  empName.textContent = name;
+  tsEl.textContent = new Date().toLocaleTimeString('de-DE');
+  if (action === 'OUT' && duration) {
+    durEl.className = 'duration-badge visible';
+    durEl.textContent = '⏱ ' + duration;
+  }
+  setTimeout(setScanning, 4000);
+}
+
+function setError(msg) {
+  ring.className = 'status-ring error';
+  icon.textContent = '⚠';
+  label.textContent = 'Unbekannt';
+  empName.className = 'employee-name';
+  empName.textContent = msg;
+  tsEl.textContent = '';
+  setTimeout(setScanning, 5000);
+}
+
+// ─────────────────────────────────────────────
+//  LOG
+// ─────────────────────────────────────────────
+let logEntries = [];
+try { logEntries = JSON.parse(localStorage.getItem('nfc-log') || '[]'); } catch(e) {}
+
+function addLog(name, action, time, duration) {
+  const entry = { name, action, time, duration };
+  logEntries.unshift(entry);
+  if (logEntries.length > 20) logEntries.pop();
+  try { localStorage.setItem('nfc-log', JSON.stringify(logEntries)); } catch(e) {}
+  renderLog();
+}
+
+function renderLog() {
+  const list = document.getElementById('logList');
+  list.innerHTML = '';
+  logEntries.slice(0, 5).forEach(e => {
+    const div = document.createElement('div');
+    div.className = 'log-entry';
+    div.innerHTML = `
+      <div class="log-dot ${e.action.toLowerCase()}"></div>
+      <div class="log-name">${e.name}</div>
+      <div class="log-action ${e.action.toLowerCase()}">${e.action}</div>
+      ${e.duration ? `<div class="log-dur">${e.duration}</div>` : ''}
+      <div class="log-time">${e.time}</div>
+    `;
+    list.appendChild(div);
+  });
+}
+renderLog();
+
+// ─────────────────────────────────────────────
+//  NFC
+// ─────────────────────────────────────────────
+async function startNFC() {
+  if (!('NDEFReader' in window)) {
+    empName.textContent = '';
+    icon.textContent = '⚠';
+    ring.className = 'status-ring error';
+    label.textContent = 'Nicht unterstützt';
+    const main = document.querySelector('main');
+    const p = document.createElement('div');
+    p.className = 'no-nfc';
+    p.innerHTML = '<strong>Web NFC nicht verfügbar</strong>Nur Chrome auf Android unterstützt Web NFC.<br>Seite über HTTPS öffnen.';
+    main.appendChild(p);
+    return;
+  }
+
+  try {
+    const reader = new NDEFReader();
+    await reader.scan();
+
+    reader.addEventListener('reading', ({ serialNumber }) => {
+      const uid = serialNumber.toLowerCase().trim();
+      handleTag(uid);
+    });
+
+    reader.addEventListener('readingerror', () => {
+      setError('Lesefehler');
+    });
+
+  } catch (err) {
+    setError('NFC-Fehler: ' + err.message);
+  }
+}
+
+async function handleTag(uid) {
+  const name = config.employees[uid];
+  if (!name) {
+    setError('UID: ' + uid);
+    return;
+  }
+
+  const action = nextAction(uid);
+  const timestamp = new Date().toISOString();
+  const timeStr = new Date().toLocaleTimeString('de-DE');
+
+  // Optimistic UI update
+  setSuccess(name, action, null);
+
+  // State speichern
+  setState(uid, { action, timestamp });
+
+  // Webhook
+  let duration = '';
+  try {
+    if (config.webhookUrl) {
+      const res = await fetch(config.webhookUrl, {
+        method: 'POST',
+        mode: 'no-cors', // Apps Script benötigt das
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid, name, action, timestamp })
+      });
+      // no-cors gibt kein body zurück – duration lokal berechnen bei OUT
+      if (action === 'OUT') {
+        const prevState = JSON.parse(localStorage.getItem('nfc-state-prev-' + uid) || 'null');
+        // duration wird ggf. später aus Sheet ersichtlich
+      }
+    }
+  } catch(e) {
+    console.warn('Webhook-Fehler:', e);
+    // Buchung lokal bereits gespeichert, kein fataler Fehler
+  }
+
+  // Dauer lokal berechnen
+  if (action === 'OUT') {
+    const prevRaw = localStorage.getItem('nfc-in-time-' + uid);
+    if (prevRaw) {
+      const diff = Math.round((Date.now() - parseInt(prevRaw)) / 60000);
+      const h = Math.floor(diff / 60), m = diff % 60;
+      duration = h > 0 ? `${h}h ${m}min` : `${m}min`;
+      // Update UI mit Dauer
+      if (duration) {
+        durEl.className = 'duration-badge visible';
+        durEl.textContent = '⏱ ' + duration;
+      }
+      localStorage.removeItem('nfc-in-time-' + uid);
+    }
+  } else {
+    localStorage.setItem('nfc-in-time-' + uid, Date.now().toString());
+  }
+
+  addLog(name, action, timeStr, duration);
+}
+
+// ─────────────────────────────────────────────
+//  INIT
+// ─────────────────────────────────────────────
+loadConfig();
+
+// Direkt starten oder Setup anzeigen?
+if (!config.webhookUrl || Object.keys(config.employees).length === 0) {
+  document.getElementById('overlay').classList.remove('hidden');
+}
+
+startNFC();
+</script>
+
+</body>
+</html>
