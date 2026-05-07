@@ -580,23 +580,39 @@ renderLog();
 // ─────────────────────────────────────────────
 //  NFC
 // ─────────────────────────────────────────────
+let nfcStarted = false;
+
+function showNotSupported() {
+  empName.textContent = '';
+  icon.textContent = '⚠';
+  ring.className = 'status-ring error';
+  label.textContent = 'Nicht unterstützt';
+  const main = document.querySelector('main');
+  const p = document.createElement('div');
+  p.className = 'no-nfc';
+  p.innerHTML = '<strong>Web NFC nicht verfügbar</strong>Nur Chrome auf Android unterstützt Web NFC.<br>Seite über HTTPS öffnen.';
+  main.appendChild(p);
+}
+
+function showTapToStart() {
+  ring.className = 'status-ring';
+  ring.style.cursor = 'pointer';
+  icon.textContent = '👆';
+  label.textContent = 'Antippen zum Starten';
+  empName.textContent = 'NFC aktivieren';
+}
+
 async function startNFC() {
+  if (nfcStarted) return;
   if (!('NDEFReader' in window)) {
-    empName.textContent = '';
-    icon.textContent = '⚠';
-    ring.className = 'status-ring error';
-    label.textContent = 'Nicht unterstützt';
-    const main = document.querySelector('main');
-    const p = document.createElement('div');
-    p.className = 'no-nfc';
-    p.innerHTML = '<strong>Web NFC nicht verfügbar</strong>Nur Chrome auf Android unterstützt Web NFC.<br>Seite über HTTPS öffnen.';
-    main.appendChild(p);
+    showNotSupported();
     return;
   }
 
   try {
     const reader = new NDEFReader();
     await reader.scan();
+    nfcStarted = true;
 
     reader.addEventListener('reading', ({ serialNumber }) => {
       const uid = serialNumber.toLowerCase().trim();
@@ -607,10 +623,22 @@ async function startNFC() {
       setError('Lesefehler');
     });
 
+    // Erfolgreich gestartet → blauen Scan-Ring zeigen
+    setScanning();
+
   } catch (err) {
-    setError('NFC-Fehler: ' + err.message);
+    if (err.name === 'NotAllowedError') {
+      setError('NFC-Berechtigung fehlt');
+    } else {
+      setError('NFC-Fehler: ' + err.message);
+    }
   }
 }
+
+// Ring antippen zum NFC-Start (User-Geste erforderlich)
+ring.addEventListener('click', () => {
+  if (!nfcStarted) startNFC();
+});
 
 async function handleTag(uid) {
   const name = config.employees[uid];
@@ -681,7 +709,15 @@ if (!config.webhookUrl || Object.keys(config.employees).length === 0) {
   document.getElementById('overlay').classList.remove('hidden');
 }
 
-startNFC();
+// NFC braucht User-Geste → Tap-to-Start anzeigen
+if ('NDEFReader' in window) {
+  // Versuche Auto-Start (klappt manchmal); wenn nicht → Tap-to-Start
+  startNFC().then(() => {
+    if (!nfcStarted) showTapToStart();
+  });
+} else {
+  showNotSupported();
+}
 </script>
 
 </body>
